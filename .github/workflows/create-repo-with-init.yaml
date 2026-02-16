@@ -18,10 +18,9 @@ on:
       auto_init:
         description: 'Initialize with README'
         required: false
-        type: boolean
-        default: true
-      port_context:
-        description: 'Port context (automatically provided)'
+        type: string
+      run_id:
+        description: 'Port Run ID'
         required: true
         type: string
 
@@ -29,51 +28,51 @@ jobs:
   create-repository:
     runs-on: ubuntu-latest
     steps:
-      - name: Extract Port Run ID
-        id: extract_run_id
-        run: |
-          runId=$(echo '${{ inputs.port_context }}' | jq -r '.runId // .run_id // empty')
-          if [ -z "$runId" ]; then
-            echo "Error: Could not extract runId from port_context"
-            echo "port_context: ${{ inputs.port_context }}"
-            exit 1
-          fi
-          echo "runId=$runId" >> $GITHUB_OUTPUT
-          echo "Extracted Run ID: $runId"
-
       - name: Inform Port of workflow start
         uses: port-labs/port-github-action@v1
         with:
           clientId: ${{ secrets.PORT_CLIENT_ID }}
           clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
           operation: PATCH_RUN
-          runId: ${{ steps.extract_run_id.outputs.runId }}
+          runId: ${{ inputs.run_id }}
           logMessage: |
             Creating GitHub repository: ${{ inputs.repository_name }} ... ⚙️
 
       - name: Create GitHub Repository
         id: create_repo
         run: |
+          # Convert auto_init string to boolean
+          AUTO_INIT="false"
+          if [ "${{ inputs.auto_init }}" = "true" ]; then
+            AUTO_INIT="true"
+          fi
+          
+          # Convert visibility to private boolean
+          PRIVATE="true"
+          if [ "${{ inputs.visibility }}" = "public" ]; then
+            PRIVATE="false"
+          fi
+          
           RESPONSE=$(curl -s -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/user/repos \
-            -d '{
-              "name": "${{ inputs.repository_name }}",
-              "description": "${{ inputs.description }}",
-              "private": ${{ inputs.visibility == 'private' }},
-              "auto_init": ${{ inputs.auto_init }}
-            }')
+            -d "{
+              \"name\": \"${{ inputs.repository_name }}\",
+              \"description\": \"${{ inputs.description }}\",
+              \"private\": $PRIVATE,
+              \"auto_init\": $AUTO_INIT
+            }")
           
           echo "response=$RESPONSE" >> $GITHUB_OUTPUT
           
-          REPO_URL=$(echo $RESPONSE | jq -r '.html_url')
-          REPO_FULL_NAME=$(echo $RESPONSE | jq -r '.full_name')
+          REPO_URL=$(echo "$RESPONSE" | jq -r '.html_url')
+          REPO_FULL_NAME=$(echo "$RESPONSE" | jq -r '.full_name')
           
           if [ "$REPO_URL" = "null" ] || [ -z "$REPO_URL" ]; then
             echo "Failed to create repository"
-            echo $RESPONSE | jq .
+            echo "$RESPONSE" | jq .
             exit 1
           fi
           
@@ -88,7 +87,7 @@ jobs:
           clientId: ${{ secrets.PORT_CLIENT_ID }}
           clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
           operation: PATCH_RUN
-          runId: ${{ steps.extract_run_id.outputs.runId }}
+          runId: ${{ inputs.run_id }}
           logMessage: |
             Repository created: ${{ steps.create_repo.outputs.repo_url }}
             Adding init.yml workflow file...
@@ -120,17 +119,17 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{ steps.create_repo.outputs.repo_full_name }}/contents/.github/workflows/init.yml \
-            -d '{
-              "message": "Add init workflow from central repository",
-              "content": "${{ steps.get_init_yml.content }}"
-            }')
+            "https://api.github.com/repos/${{ steps.create_repo.outputs.repo_full_name }}/contents/.github/workflows/init.yml" \
+            -d "{
+              \"message\": \"Add init workflow from central repository\",
+              \"content\": \"${{ steps.get_init_yml.content }}\"
+            }")
           
-          FILE_URL=$(echo $RESPONSE | jq -r '.content.html_url')
+          FILE_URL=$(echo "$RESPONSE" | jq -r '.content.html_url')
           
           if [ "$FILE_URL" = "null" ] || [ -z "$FILE_URL" ]; then
             echo "⚠️ Warning: Could not verify init.yml creation"
-            echo $RESPONSE | jq .
+            echo "$RESPONSE" | jq .
           else
             echo "init.yml workflow file added to new repository"
           fi
@@ -141,7 +140,7 @@ jobs:
           clientId: ${{ secrets.PORT_CLIENT_ID }}
           clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
           operation: PATCH_RUN
-          runId: ${{ steps.extract_run_id.outputs.runId }}
+          runId: ${{ inputs.run_id }}
           logMessage: |
             Repository created successfully: ${{ steps.create_repo.outputs.repo_url }}
             init.yml workflow file added from bdocean/workflows
@@ -153,7 +152,7 @@ jobs:
           clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
           operation: PATCH_RUN
           status: "SUCCESS"
-          runId: ${{ steps.extract_run_id.outputs.runId }}
+          runId: ${{ inputs.run_id }}
           link: ${{ steps.create_repo.outputs.repo_url }}
 
       - name: Inform Port of failure
@@ -164,6 +163,6 @@ jobs:
           clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
           operation: PATCH_RUN
           status: "FAILURE"
-          runId: ${{ steps.extract_run_id.outputs.runId }}
+          runId: ${{ inputs.run_id }}
           logMessage: |
             Failed to create repository or add init.yml workflow file
