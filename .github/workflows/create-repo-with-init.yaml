@@ -11,14 +11,17 @@ on:
         description: 'Repository Description'
         required: false
         type: string
+        default: ''
       visibility:
         description: 'Repository Visibility'
         required: true
         type: string
+        default: 'private'
       auto_init:
         description: 'Initialize with README'
         required: false
         type: string
+        default: 'true'
       run_id:
         description: 'Port Run ID'
         required: true
@@ -53,33 +56,50 @@ jobs:
             PRIVATE="false"
           fi
           
-          RESPONSE=$(curl -s -X POST \
+          # Set description (handle empty string)
+          DESCRIPTION="${{ inputs.description }}"
+          if [ -z "$DESCRIPTION" ]; then
+            DESCRIPTION="Repository created via Port"
+          fi
+          
+          echo "Creating repository with settings:"
+          echo "  Name: ${{ inputs.repository_name }}"
+          echo "  Description: $DESCRIPTION"
+          echo "  Private: $PRIVATE"
+          echo "  Auto Init: $AUTO_INIT"
+          
+          RESPONSE=$(curl -s -w "%{http_code}" -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/user/repos \
             -d "{
               \"name\": \"${{ inputs.repository_name }}\",
-              \"description\": \"${{ inputs.description }}\",
+              \"description\": \"$DESCRIPTION\",
               \"private\": $PRIVATE,
               \"auto_init\": $AUTO_INIT
             }")
           
-          echo "response=$RESPONSE" >> $GITHUB_OUTPUT
+          # Split response and status code
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
           
-          REPO_URL=$(echo "$RESPONSE" | jq -r '.html_url')
-          REPO_FULL_NAME=$(echo "$RESPONSE" | jq -r '.full_name')
+          echo "HTTP Status: $HTTP_CODE"
           
-          if [ "$REPO_URL" = "null" ] || [ -z "$REPO_URL" ]; then
-            echo "Failed to create repository"
-            echo "$RESPONSE" | jq .
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            REPO_URL=$(echo "$BODY" | jq -r '.html_url')
+            REPO_FULL_NAME=$(echo "$BODY" | jq -r '.full_name')
+          
+            # Use delimiter for multiline output
+            echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
+            echo "repo_full_name=$REPO_FULL_NAME" >> $GITHUB_OUTPUT
+          
+            echo "Repository created: $REPO_URL"
+          else
+            echo "Failed to create repository (HTTP $HTTP_CODE)"
+            echo "$BODY" | jq .
             exit 1
           fi
-          
-          echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
-          echo "repo_full_name=$REPO_FULL_NAME" >> $GITHUB_OUTPUT
-          
-          echo "Repository created: $REPO_URL"
 
       - name: Inform Port of repository creation
         uses: port-labs/port-github-action@v1
@@ -109,29 +129,48 @@ jobs:
             echo "init.yml not found in central repository at .github/workflows/init.yml"
             exit 1
           fi
+          
           INIT_YML_CONTENT=$(cat central-repo/.github/workflows/init.yml | base64 -w 0)
-          echo "content=$INIT_YML_CONTENT" >> $GITHUB_OUTPUT
+          
+          # Use delimiter for multiline output
+          {
+            echo "content<<EOF"
+            echo "$INIT_YML_CONTENT"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+          
           echo "init.yml content retrieved from bdocean/workflows"
 
       - name: Create init.yml in new repository
+        id: create_init_file
         run: |
-          RESPONSE=$(curl -s -X PUT \
+          echo "Creating init.yml in ${{ steps.create_repo.outputs.repo_full_name }}"
+          
+          RESPONSE=$(curl -s -w "%{http_code}" -X PUT \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${{ steps.create_repo.outputs.repo_full_name }}/contents/.github/workflows/init.yml" \
             -d "{
               \"message\": \"Add init workflow from central repository\",
-              \"content\": \"${{ steps.get_init_yml.content }}\"
+              \"content\": \"${{ steps.get_init_yml.outputs.content }}\"
             }")
           
-          FILE_URL=$(echo "$RESPONSE" | jq -r '.content.html_url')
+          # Split response and status code
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
           
-          if [ "$FILE_URL" = "null" ] || [ -z "$FILE_URL" ]; then
-            echo "⚠️ Warning: Could not verify init.yml creation"
-            echo "$RESPONSE" | jq .
-          else
+          echo "HTTP Status: $HTTP_CODE"
+          
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            FILE_URL=$(echo "$BODY" | jq -r '.content.html_url')
+            echo "file_url=$FILE_URL" >> $GITHUB_OUTPUT
             echo "init.yml workflow file added to new repository"
+            echo "   File URL: $FILE_URL"
+          else
+            echo "Warning: Could not create init.yml file (HTTP $HTTP_CODE)"
+            echo "$BODY" | jq . || echo "$BODY"
+            # Don't fail the entire workflow, just warn
           fi
 
       - name: Inform Port of completion
