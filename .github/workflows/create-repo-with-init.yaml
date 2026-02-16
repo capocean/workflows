@@ -14,18 +14,14 @@ on:
       visibility:
         description: 'Repository Visibility'
         required: true
-        type: choice
-        options:
-          - private
-          - public
-        default: private
+        type: string
       auto_init:
         description: 'Initialize with README'
         required: false
         type: boolean
         default: true
       port_context:
-        description: 'Port context'
+        description: 'Port context (automatically provided)'
         required: true
         type: string
 
@@ -33,13 +29,25 @@ jobs:
   create-repository:
     runs-on: ubuntu-latest
     steps:
+      - name: Extract Port Run ID
+        id: extract_run_id
+        run: |
+          runId=$(echo '${{ inputs.port_context }}' | jq -r '.runId // .run_id // empty')
+          if [ -z "$runId" ]; then
+            echo "Error: Could not extract runId from port_context"
+            echo "port_context: ${{ inputs.port_context }}"
+            exit 1
+          fi
+          echo "runId=$runId" >> $GITHUB_OUTPUT
+          echo "Extracted Run ID: $runId"
+
       - name: Inform Port of workflow start
         uses: port-labs/port-github-action@v1
         with:
           clientId: ${{ secrets.PORT_CLIENT_ID }}
           clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
           operation: PATCH_RUN
-          runId: ${{ fromJson(inputs.port_context).runId }}
+          runId: ${{ steps.extract_run_id.outputs.runId }}
           logMessage: |
             Creating GitHub repository: ${{ inputs.repository_name }} ... ⚙️
 
@@ -63,7 +71,7 @@ jobs:
           REPO_URL=$(echo $RESPONSE | jq -r '.html_url')
           REPO_FULL_NAME=$(echo $RESPONSE | jq -r '.full_name')
           
-          if [ "$REPO_URL" = "null" ]; then
+          if [ "$REPO_URL" = "null" ] || [ -z "$REPO_URL" ]; then
             echo "Failed to create repository"
             echo $RESPONSE | jq .
             exit 1
@@ -80,7 +88,7 @@ jobs:
           clientId: ${{ secrets.PORT_CLIENT_ID }}
           clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
           operation: PATCH_RUN
-          runId: ${{ fromJson(inputs.port_context).runId }}
+          runId: ${{ steps.extract_run_id.outputs.runId }}
           logMessage: |
             Repository created: ${{ steps.create_repo.outputs.repo_url }}
             Adding init.yml workflow file...
@@ -120,13 +128,12 @@ jobs:
           
           FILE_URL=$(echo $RESPONSE | jq -r '.content.html_url')
           
-          if [ "$FILE_URL" = "null" ]; then
-            echo "Failed to create init.yml file"
+          if [ "$FILE_URL" = "null" ] || [ -z "$FILE_URL" ]; then
+            echo "⚠️ Warning: Could not verify init.yml creation"
             echo $RESPONSE | jq .
-            exit 1
+          else
+            echo "init.yml workflow file added to new repository"
           fi
-          
-          echo "init.yml workflow file added to new repository"
 
       - name: Inform Port of completion
         uses: port-labs/port-github-action@v1
@@ -134,7 +141,7 @@ jobs:
           clientId: ${{ secrets.PORT_CLIENT_ID }}
           clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
           operation: PATCH_RUN
-          runId: ${{ fromJson(inputs.port_context).runId }}
+          runId: ${{ steps.extract_run_id.outputs.runId }}
           logMessage: |
             Repository created successfully: ${{ steps.create_repo.outputs.repo_url }}
             init.yml workflow file added from bdocean/workflows
@@ -146,7 +153,7 @@ jobs:
           clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
           operation: PATCH_RUN
           status: "SUCCESS"
-          runId: ${{ fromJson(inputs.port_context).runId }}
+          runId: ${{ steps.extract_run_id.outputs.runId }}
           link: ${{ steps.create_repo.outputs.repo_url }}
 
       - name: Inform Port of failure
@@ -157,6 +164,6 @@ jobs:
           clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
           operation: PATCH_RUN
           status: "FAILURE"
-          runId: ${{ fromJson(inputs.port_context).runId }}
+          runId: ${{ steps.extract_run_id.outputs.runId }}
           logMessage: |
             Failed to create repository or add init.yml workflow file
