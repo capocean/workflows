@@ -1,1 +1,1 @@
-Workflow repository 
+Workflow repository for centralized workflow configuration
