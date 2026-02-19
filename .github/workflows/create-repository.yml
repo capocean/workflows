@@ -1,0 +1,65 @@
+name: Create New Repository
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_name:
+        description: 'Name of the new repository'
+        required: true
+        type: string
+      description:
+        description: 'Repository description'
+        required: false
+        type: string
+      private:
+        description: 'Make repository private (true/false)'
+        required: false
+        type: string
+        default: 'true'
+      port_run_id:
+        description: 'Port run ID for status reporting'
+        required: false
+        type: string
+
+jobs:
+  create-repository:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub Repository
+        id: create-repo
+        run: |
+          echo "Creating repository: ${{ github.event.inputs.repo_name }}"
+          
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ secrets.GH_TOKEN }}" -H "X-GitHub-Api-Version: 2022-11-28" -d "{\"name\": \"${{ github.event.inputs.repo_name }}\", \"description\": \"${{ github.event.inputs.description }}\", \"private\": ${{ github.event.inputs.private }}, \"auto_init\": true}" "https://api.github.com/orgs/${{ github.repository_owner }}/repos")
+          
+          if [ $HTTP_STATUS -eq 201 ]; then
+            echo "Repository created successfully"
+            REPO_URL=$(cat response.json | jq -r '.html_url')
+            echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
+            echo "Repository URL: $REPO_URL"
+          else
+            echo "Failed to create repository. HTTP Status: $HTTP_STATUS"
+            cat response.json
+            exit 1
+          fi
+
+      - name: Report Success to Port
+        if: success() && github.event.inputs.port_run_id != ''
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: PATCH_RUN
+          runId: ${{ github.event.inputs.port_run_id }}
+          logMessage: "Repository ${{ github.event.inputs.repo_name }} created successfully at ${{ steps.create-repo.outputs.repo_url }}"
+
+      - name: Report Failure to Port
+        if: failure() && github.event.inputs.port_run_id != ''
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: PATCH_RUN
+          runId: ${{ github.event.inputs.port_run_id }}
+          status: "FAILURE"
+          logMessage: "Failed to create repository ${{ github.event.inputs.repo_name }}"
