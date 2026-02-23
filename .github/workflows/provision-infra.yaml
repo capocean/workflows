@@ -1,0 +1,159 @@
+name: Provision Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_name:
+        description: 'Repository name'
+        required: true
+      repo_description:
+        description: 'Repository description'
+        required: true
+      jira_issue_key:
+        description: 'Jira issue key'
+        required: true
+      environment:
+        description: 'Environment (dev/staging/prod)'
+        required: false
+        default: 'dev'
+      port_run_id:
+        description: 'Port action run ID'
+        required: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  provision-resources:
+    runs-on: ubuntu-latest
+    outputs:
+      repo_url: ${{ steps.create-repo.outputs.repo_url }}
+      bucket_name: ${{ steps.create-s3.outputs.bucket_name }}
+
+    steps:
+      - name: Report to Port - Starting
+        if: inputs.port_run_id != ''
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: PATCH_RUN
+          runId: ${{ inputs.port_run_id }}
+          logMessage: |
+            Starting infrastructure provisioning...
+            - Repository: ${{ inputs.repo_name }}
+            - Environment: ${{ inputs.environment }}
+            - Jira Issue: ${{ inputs.jira_issue_key }}
+
+      - name: Create GitHub Repository
+        id: create-repo
+        env:
+          GH_TOKEN: ${{ secrets.ORG_GITHUB_TOKEN }}
+        run: |
+          echo "Creating GitHub repository..."
+          
+          RESPONSE=$(gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /orgs/capocean/repos \
+            -f name='${{ inputs.repo_name }}' \
+            -f description='${{ inputs.repo_description }}' \
+            -F private=false \
+            -F auto_init=true)
+          
+          REPO_URL=$(echo "$RESPONSE" | jq -r '.html_url')
+          echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
+          echo "Created repository: $REPO_URL"
+
+      - name: Report to Port - Repo Created
+        if: inputs.port_run_id != ''
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: PATCH_RUN
+          runId: ${{ inputs.port_run_id }}
+          logMessage: |
+            GitHub repository created successfully
+            URL: ${{ steps.create-repo.outputs.repo_url }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::158670531871:role/GitHubActionPort
+          aws-region: us-east-2
+
+      - name: Create S3 Bucket
+        id: create-s3
+        run: |
+          echo "Creating S3 bucket..."
+          
+          BUCKET_NAME="${{ inputs.repo_name }}-${{ inputs.environment }}"
+          BUCKET_NAME=$(echo "$BUCKET_NAME" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+          
+          # Create bucket
+          aws s3api create-bucket \
+            --bucket "$BUCKET_NAME" \
+            --region us-east-2 \
+            --create-bucket-configuration LocationConstraint=us-east-2
+          
+          # Enable versioning
+          aws s3api put-bucket-versioning \
+            --bucket "$BUCKET_NAME" \
+            --versioning-configuration Status=Enabled
+          
+          # Block public access
+          aws s3api put-public-access-block \
+            --bucket "$BUCKET_NAME" \
+            --public-access-block-configuration \
+              "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+          
+          # Add tags
+          aws s3api put-bucket-tagging \
+            --bucket "$BUCKET_NAME" \
+            --tagging "TagSet=[{Key=JiraIssue,Value=${{ inputs.jira_issue_key }}},{Key=ManagedBy,Value=Port},{Key=Environment,Value=${{ inputs.environment }}},{Key=Repository,Value=${{ inputs.repo_name }}}]"
+          
+          echo "bucket_name=$BUCKET_NAME" >> $GITHUB_OUTPUT
+          echo "Created S3 bucket: $BUCKET_NAME"
+
+      - name: Report to Port - S3 Created
+        if: inputs.port_run_id != ''
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: PATCH_RUN
+          runId: ${{ inputs.port_run_id }}
+          logMessage: |
+            S3 bucket created successfully
+            Bucket: ${{ steps.create-s3.outputs.bucket_name }}
+            Region: us-east-2
+
+      - name: Summary
+        run: |
+          echo "## Provisioning Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Resources Created:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Repository**: ${{ steps.create-repo.outputs.repo_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **S3 Bucket**: \`${{ steps.create-s3.outputs.bucket_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: us-east-2" >> $GITHUB_STEP_SUMMARY
+          echo "- **Jira Issue**: ${{ inputs.jira_issue_key }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Report to Port - Complete
+        if: inputs.port_run_id != ''
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: PATCH_RUN
+          runId: ${{ inputs.port_run_id }}
+          status: SUCCESS
+          logMessage: |
+            Infrastructure provisioning completed successfully!
+            
+            GitHub Repository: ${{ steps.create-repo.outputs.repo_url }}
+            S3 Bucket: ${{ steps.create-s3.outputs.bucket_name }}
+            Region: us-east-2
