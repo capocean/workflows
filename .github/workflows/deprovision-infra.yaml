@@ -1,0 +1,161 @@
+name: Deprovision Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_name:
+        description: Repository name
+        required: true
+      environment:
+        description: Environment (dev/staging/prod)
+        required: false
+        default: dev
+      jira_issue_key:
+        description: Jira issue key
+        required: true
+      delete_repo:
+        description: Delete GitHub repository
+        required: false
+        default: 'true'
+      port_context:
+        description: Port context
+        required: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deprovision-resources:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::158670531871:role/GitHubActionPort
+          aws-region: us-east-2
+
+      - name: Prepare Stack Name
+        id: prepare
+        run: |
+          STACK_NAME="${{ inputs.repo_name }}-${{ inputs.environment }}-stack"
+          STACK_NAME=$(echo "$STACK_NAME" | tr '[:upper:]' '[:lower:]')
+          echo "stack_name=$STACK_NAME" >> $GITHUB_OUTPUT
+          echo "Stack name to delete: $STACK_NAME"
+
+      - name: Check if Stack Exists
+        id: check-stack
+        run: |
+          STACK_NAME="${{ steps.prepare.outputs.stack_name }}"
+          
+          if aws cloudformation describe-stacks --stack-name "$STACK_NAME" 2>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Stack exists: $STACK_NAME"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Stack does not exist: $STACK_NAME"
+          fi
+
+      - name: Empty S3 Bucket Before Deletion
+        if: steps.check-stack.outputs.exists == 'true'
+        run: |
+          STACK_NAME="${{ steps.prepare.outputs.stack_name }}"
+          
+          echo "Getting bucket name from stack outputs..."
+          BUCKET_NAME=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --query 'Stacks[0].Outputs[?OutputKey==`BucketName`].OutputValue' \
+            --output text)
+          
+          if [ -n "$BUCKET_NAME" ]; then
+            echo "Emptying S3 bucket: $BUCKET_NAME"
+          
+            aws s3 rm "s3://$BUCKET_NAME" --recursive
+          
+            echo "Deleting all object versions..."
+            aws s3api list-object-versions \
+              --bucket "$BUCKET_NAME" \
+              --query 'Versions[].{Key:Key,VersionId:VersionId}' \
+              --output json | \
+            jq -r '.[] | "--key \(.Key) --version-id \(.VersionId)"' | \
+            xargs -I {} aws s3api delete-object --bucket "$BUCKET_NAME" {}
+          
+            echo "Deleting all delete markers..."
+            aws s3api list-object-versions \
+              --bucket "$BUCKET_NAME" \
+              --query 'DeleteMarkers[].{Key:Key,VersionId:VersionId}' \
+              --output json | \
+            jq -r '.[] | "--key \(.Key) --version-id \(.VersionId)"' | \
+            xargs -I {} aws s3api delete-object --bucket "$BUCKET_NAME" {}
+          
+            echo "S3 bucket emptied successfully"
+          else
+            echo "No bucket found in stack outputs"
+          fi
+
+      - name: Delete CloudFormation Stack
+        if: steps.check-stack.outputs.exists == 'true'
+        run: |
+          STACK_NAME="${{ steps.prepare.outputs.stack_name }}"
+          
+          echo "Deleting CloudFormation stack: $STACK_NAME"
+          
+          aws cloudformation delete-stack --stack-name "$STACK_NAME"
+          
+          echo "Waiting for stack deletion to complete..."
+          aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME"
+          
+          echo "CloudFormation stack deleted successfully"
+
+      - name: Delete GitHub Repository
+        if: inputs.delete_repo == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ORG_GITHUB_TOKEN }}
+        run: |
+          REPO_NAME="${{ inputs.repo_name }}"
+          
+          echo "Checking if repository exists: capocean/$REPO_NAME"
+          
+          if gh repo view "capocean/$REPO_NAME" >/dev/null 2>&1; then
+            echo "Deleting GitHub repository: capocean/$REPO_NAME"
+          
+            gh repo delete "capocean/$REPO_NAME" --yes
+          
+            echo "GitHub repository deleted successfully"
+          else
+            echo "Repository does not exist: capocean/$REPO_NAME"
+          fi
+
+      - name: Report Success to Port
+        if: success()
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: PATCH_RUN
+          runId: ${{ fromJson(inputs.port_context).runId }}
+          logMessage: |
+            Infrastructure deprovisioned successfully
+            
+            Resources Deleted:
+            - CloudFormation Stack: ${{ steps.prepare.outputs.stack_name }}
+            - S3 Bucket and all contents
+            ${{ inputs.delete_repo == 'true' && format('- GitHub Repository: {0}', inputs.repo_name) || '- GitHub Repository: Skipped' }}
+
+      - name: Report Failure to Port
+        if: failure()
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: PATCH_RUN
+          runId: ${{ fromJson(inputs.port_context).runId }}
+          logMessage: |
+            Infrastructure deprovisioning failed
+            
+            Please check the GitHub Actions logs for details
+            You may need to manually clean up resources

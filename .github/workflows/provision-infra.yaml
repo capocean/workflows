@@ -4,18 +4,21 @@ on:
   workflow_dispatch:
     inputs:
       repo_name:
-        description: 'Repository name'
+        description: Repository name
         required: true
       repo_description:
-        description: 'Repository description'
+        description: Repository description
         required: true
       jira_issue_key:
-        description: 'Jira issue key'
+        description: Jira issue key
         required: true
       environment:
-        description: 'Environment (dev/staging/prod)'
+        description: Environment (dev/staging/prod)
         required: false
-        default: 'dev'
+        default: dev
+      port_context:
+        description: Port context
+        required: false
 
 permissions:
   id-token: write
@@ -26,9 +29,14 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       repo_url: ${{ steps.create-repo.outputs.repo_url }}
-      bucket_name: ${{ steps.create-s3.outputs.bucket_name }}
+      stack_name: ${{ steps.deploy-stack.outputs.stack_name }}
+      bucket_name: ${{ steps.get-outputs.outputs.bucket_name }}
+      bucket_arn: ${{ steps.get-outputs.outputs.bucket_arn }}
 
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Create GitHub Repository
         id: create-repo
         env:
@@ -48,7 +56,7 @@ jobs:
           
           REPO_URL=$(echo "$RESPONSE" | jq -r '.html_url')
           echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
-          echo "Created repository: $REPO_URL"
+          echo "Repository created: $REPO_URL"
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -56,42 +64,89 @@ jobs:
           role-to-assume: arn:aws:iam::158670531871:role/GitHubActionPort
           aws-region: us-east-2
 
-      - name: Create S3 Bucket
-        id: create-s3
+      - name: Prepare Stack Name
+        id: prepare
         run: |
-          echo "Creating S3 bucket..."
+          STACK_NAME="${{ inputs.repo_name }}-${{ inputs.environment }}-stack"
+          STACK_NAME=$(echo "$STACK_NAME" | tr '[:upper:]' '[:lower:]')
+          echo "stack_name=$STACK_NAME" >> $GITHUB_OUTPUT
+          echo "Stack name: $STACK_NAME"
+
+      - name: Deploy CloudFormation Stack
+        id: deploy-stack
+        run: |
+          STACK_NAME="${{ steps.prepare.outputs.stack_name }}"
           
-          BUCKET_NAME="${{ inputs.repo_name }}-${{ inputs.environment }}"
-          BUCKET_NAME=$(echo "$BUCKET_NAME" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+          echo "Deploying CloudFormation stack: $STACK_NAME"
           
-          aws s3api create-bucket \
-            --bucket "$BUCKET_NAME" \
-            --region us-east-2 \
-            --create-bucket-configuration LocationConstraint=us-east-2
+          aws cloudformation deploy \
+            --template-file cloudformation/s3-infrastructure.yaml \
+            --stack-name "$STACK_NAME" \
+            --parameter-overrides \
+              ProjectName="${{ inputs.repo_name }}" \
+              Environment="${{ inputs.environment }}" \
+              JiraIssueKey="${{ inputs.jira_issue_key }}" \
+            --tags \
+              JiraIssue="${{ inputs.jira_issue_key }}" \
+              ManagedBy=Port \
+              Environment="${{ inputs.environment }}" \
+              Repository="${{ inputs.repo_name }}" \
+            --no-fail-on-empty-changeset
           
-          aws s3api put-bucket-versioning \
-            --bucket "$BUCKET_NAME" \
-            --versioning-configuration Status=Enabled
+          echo "stack_name=$STACK_NAME" >> $GITHUB_OUTPUT
+          echo "CloudFormation stack deployed successfully"
+
+      - name: Get Stack Outputs
+        id: get-outputs
+        run: |
+          STACK_NAME="${{ steps.prepare.outputs.stack_name }}"
           
-          aws s3api put-public-access-block \
-            --bucket "$BUCKET_NAME" \
-            --public-access-block-configuration \
-              "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+          echo "Fetching stack outputs from: $STACK_NAME"
           
-          aws s3api put-bucket-tagging \
-            --bucket "$BUCKET_NAME" \
-            --tagging "TagSet=[{Key=JiraIssue,Value=${{ inputs.jira_issue_key }}},{Key=ManagedBy,Value=Port},{Key=Environment,Value=${{ inputs.environment }}},{Key=Repository,Value=${{ inputs.repo_name }}}]"
+          OUTPUTS=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --query 'Stacks[0].Outputs' \
+            --output json)
+          
+          BUCKET_NAME=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="BucketName") | .OutputValue')
+          BUCKET_ARN=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="BucketArn") | .OutputValue')
+          BUCKET_REGION=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="BucketRegion") | .OutputValue')
           
           echo "bucket_name=$BUCKET_NAME" >> $GITHUB_OUTPUT
-          echo "Created S3 bucket: $BUCKET_NAME"
+          echo "bucket_arn=$BUCKET_ARN" >> $GITHUB_OUTPUT
+          echo "bucket_region=$BUCKET_REGION" >> $GITHUB_OUTPUT
+          
+          echo "Stack outputs retrieved:"
+          echo "  - Bucket Name: $BUCKET_NAME"
+          echo "  - Bucket ARN: $BUCKET_ARN"
+          echo "  - Bucket Region: $BUCKET_REGION"
 
-      - name: Summary
-        run: |
-          echo "## Provisioning Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Resources Created:" >> $GITHUB_STEP_SUMMARY
-          echo "- Repository: ${{ steps.create-repo.outputs.repo_url }}" >> $GITHUB_STEP_SUMMARY
-          echo "- S3 Bucket: ${{ steps.create-s3.outputs.bucket_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Region: us-east-2" >> $GITHUB_STEP_SUMMARY
-          echo "- Jira Issue: ${{ inputs.jira_issue_key }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Environment: ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+      - name: Report Success to Port
+        if: success()
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: PATCH_RUN
+          runId: ${{ fromJson(inputs.port_context).runId }}
+          logMessage: |
+            Infrastructure provisioned successfully
+            
+            Resources Created:
+            - Repository: ${{ steps.create-repo.outputs.repo_url }}
+            - CloudFormation Stack: ${{ steps.deploy-stack.outputs.stack_name }}
+            - S3 Bucket: ${{ steps.get-outputs.outputs.bucket_name }}
+            - Bucket ARN: ${{ steps.get-outputs.outputs.bucket_arn }}
+            - Region: ${{ steps.get-outputs.outputs.bucket_region }}
+
+      - name: Report Failure to Port
+        if: failure()
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: PATCH_RUN
+          runId: ${{ fromJson(inputs.port_context).runId }}
+          logMessage: |
+            Infrastructure provisioning failed            
+            Please check the GitHub Actions logs for details

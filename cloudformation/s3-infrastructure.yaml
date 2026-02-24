@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: S3 Infrastructure stack for project provisioning
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Name of the project from repository name
+    AllowedPattern: ^[a-z0-9][a-z0-9-]*[a-z0-9]$
+    ConstraintDescription: Must contain only lowercase letters, numbers, and hyphens
+
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Environment type
+
+  JiraIssueKey:
+    Type: String
+    Description: Jira issue key for tracking
+    AllowedPattern: ^[A-Z]+-[0-9]+$
+    ConstraintDescription: Must be a valid Jira issue key like PROJ-123
+
+Resources:
+  ProjectBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${ProjectName}-${Environment}
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 90
+      Tags:
+        - Key: JiraIssue
+          Value: !Ref JiraIssueKey
+        - Key: ManagedBy
+          Value: Port
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: CreatedDate
+          Value: !Sub ${AWS::StackName}
+
+Outputs:
+  BucketName:
+    Description: S3 Bucket Name
+    Value: !Ref ProjectBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-BucketName
+
+  BucketArn:
+    Description: S3 Bucket ARN
+    Value: !GetAtt ProjectBucket.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-BucketArn
+
+  BucketRegion:
+    Description: S3 Bucket Region
+    Value: !Ref AWS::Region
+    Export:
+      Name: !Sub ${AWS::StackName}-BucketRegion
+
+  StackName:
+    Description: CloudFormation Stack Name
+    Value: !Ref AWS::StackName

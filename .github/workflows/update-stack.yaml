@@ -1,0 +1,72 @@
+name: Update Infrastructure Stack
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_name:
+        description: Repository name
+        required: true
+      environment:
+        description: Environment (dev/staging/prod)
+        required: false
+        default: dev
+      jira_issue_key:
+        description: Jira issue key
+        required: true
+      port_context:
+        description: Port context
+        required: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  update-stack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::158670531871:role/GitHubActionPort
+          aws-region: us-east-2
+
+      - name: Prepare Stack Name
+        id: prepare
+        run: |
+          STACK_NAME="${{ inputs.repo_name }}-${{ inputs.environment }}-stack"
+          STACK_NAME=$(echo "$STACK_NAME" | tr '[:upper:]' '[:lower:]')
+          echo "stack_name=$STACK_NAME" >> $GITHUB_OUTPUT
+
+      - name: Update CloudFormation Stack
+        run: |
+          STACK_NAME="${{ steps.prepare.outputs.stack_name }}"
+          
+          echo "Updating CloudFormation stack: $STACK_NAME"
+          
+          aws cloudformation deploy \
+            --template-file cloudformation/s3-infrastructure.yaml \
+            --stack-name "$STACK_NAME" \
+            --parameter-overrides \
+              ProjectName="${{ inputs.repo_name }}" \
+              Environment="${{ inputs.environment }}" \
+              JiraIssueKey="${{ inputs.jira_issue_key }}" \
+            --no-fail-on-empty-changeset
+          
+          echo "Stack updated successfully"
+
+      - name: Report to Port
+        if: always()
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: PATCH_RUN
+          runId: ${{ fromJson(inputs.port_context).runId }}
+          logMessage: |
+            Stack update completed
+            Stack: ${{ steps.prepare.outputs.stack_name }}
