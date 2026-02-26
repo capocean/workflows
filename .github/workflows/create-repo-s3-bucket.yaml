@@ -119,6 +119,10 @@ jobs:
               "url": "${{ steps.create-bucket.outputs.bucket_url }}",
               "bucket_acl": "${{ inputs.bucket_acl }}"
             }
+          relations: |
+            {
+              "repository": "${{ inputs.repo_name }}"
+            }
       - name: Inform Port of success
         if: success()
         uses: port-labs/port-github-action@v1
