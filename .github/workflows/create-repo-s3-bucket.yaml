@@ -19,6 +19,7 @@ on:
         required: false
         description: 'AWS region for the bucket'
         type: string
+        default: 'us-east-1'
       environment:
         required: false
         description: 'AWS environment for the bucket'
