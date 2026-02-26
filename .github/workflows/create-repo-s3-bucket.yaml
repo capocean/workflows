@@ -7,9 +7,21 @@ on:
         required: true
         description: 'Repository name (used as bucket name)'
         type: string
+      repo_description:
+        required: false
+        description: 'Repository name (used as bucket name)'
+        type: string
+      jira_issue_key:
+        required: false
+        description: 'jira_issue_key'
+        type: string
       region:
-        required: true
+        required: false
         description: 'AWS region for the bucket'
+        type: string
+      environment:
+        required: false
+        description: 'AWS environment for the bucket'
         type: string
       port_context:
         required: true
