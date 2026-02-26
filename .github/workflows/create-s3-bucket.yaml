@@ -77,8 +77,8 @@ jobs:
           blueprint: s3Bucket
           properties: |
             {
-              "bucket_name": "${{ inputs.repo_name }}"
-              "url": "${{ steps.create-bucket.outputs.bucket_url }}"
+              "bucket_name": "${{ inputs.repo_name }}",
+              "url": "${{ steps.create-bucket.outputs.bucket_url }}",
               "bucket_acl": "${{ inputs.bucket_acl }}"
             }
           relations: |

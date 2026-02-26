@@ -115,15 +115,14 @@ jobs:
           blueprint: s3Bucket
           properties: |
             {
-              "bucket_name": "${{ steps.create-bucket.outputs.bucket_name }}"
-              "url": "${{ steps.create-bucket.outputs.bucket_url }}"
+              "bucket_name": "${{ steps.create-bucket.outputs.bucket_name }}",
+              "url": "${{ steps.create-bucket.outputs.bucket_url }}",
               "bucket_acl": "${{ inputs.bucket_acl }}"
             }
           relations: |
             {
               "repository": "port-action-workflows"
             }
-
       - name: Inform Port of success
         if: success()
         uses: port-labs/port-github-action@v1
