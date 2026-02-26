@@ -1,0 +1,112 @@
+name: Create S3 Bucket
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_name:
+        required: true
+        description: 'Repository name (used as bucket name)'
+        type: string
+      region:
+        required: true
+        description: 'AWS region for the bucket'
+        type: string
+      port_context:
+        required: true
+        description: 'Port context (run ID, blueprint, etc.)'
+        type: string
+
+jobs:
+  create-s3-bucket:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inform Port of workflow start
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          baseUrl: https://api.getport.io
+          operation: PATCH_RUN
+          runId: ${{ fromJson(inputs.port_context).run_id }}
+          logMessage: |
+            Starting S3 bucket creation process...
+            Repository Name: ${{ inputs.repo_name }}
+            Bucket Name: ${{ inputs.repo_name }}
+            Region: ${{ inputs.region }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ inputs.region }}
+
+      - name: Create S3 bucket
+        id: create-bucket
+        run: |
+          BUCKET_NAME="${{ inputs.repo_name }}"
+          echo "Creating S3 bucket: $BUCKET_NAME in region ${{ inputs.region }}"
+          
+          if [ "${{ inputs.region }}" == "us-east-1" ]; then
+            aws s3api create-bucket --bucket $BUCKET_NAME
+          else
+            aws s3api create-bucket \
+              --bucket $BUCKET_NAME \
+              --region ${{ inputs.region }} \
+              --create-bucket-configuration LocationConstraint=${{ inputs.region }}
+          fi
+          
+          echo "bucket_arn=arn:aws:s3:::$BUCKET_NAME" >> $GITHUB_OUTPUT
+          echo "bucket_url=https://s3.console.aws.amazon.com/s3/buckets/$BUCKET_NAME" >> $GITHUB_OUTPUT
+          echo "bucket_name=$BUCKET_NAME" >> $GITHUB_OUTPUT
+
+      - name: Create entity in Port
+        if: success()
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          baseUrl: https://api.getport.io
+          operation: UPSERT
+          identifier: ${{ steps.create-bucket.outputs.bucket_name }}
+          blueprint: s3Bucket
+          properties: |
+            {
+              "url": "${{ steps.create-bucket.outputs.bucket_url }}"
+            }
+
+      - name: Inform Port of success
+        if: success()
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          baseUrl: https://api.getport.io
+          operation: PATCH_RUN
+          runId: ${{ fromJson(inputs.port_context).run_id }}
+          status: 'SUCCESS'
+          logMessage: |
+            ✅ S3 bucket created successfully!
+            Repository Name: ${{ inputs.repo_name }}
+            Bucket Name: ${{ steps.create-bucket.outputs.bucket_name }}
+            Region: ${{ inputs.region }}
+            ARN: ${{ steps.create-bucket.outputs.bucket_arn }}
+          summary: |
+            S3 bucket "${{ steps.create-bucket.outputs.bucket_name }}" created successfully for repository "${{ inputs.repo_name }}" in region ${{ inputs.region }}
+          link: '["${{ steps.create-bucket.outputs.bucket_url }}"]'
+
+      - name: Inform Port of failure
+        if: failure()
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          baseUrl: https://api.getport.io
+          operation: PATCH_RUN
+          runId: ${{ fromJson(inputs.port_context).run_id }}
+          status: 'FAILURE'
+          logMessage: |
+            ❌ Failed to create S3 bucket for repository "${{ inputs.repo_name }}"
+            Please check the workflow logs for details.
+          summary: S3 bucket creation failed
+
