@@ -20,6 +20,10 @@ on:
         description: 'AWS region for the bucket'
         type: string
         default: 'us-east-1'
+      bucket_acl:
+        required: false
+        type: string
+        default: Private
       environment:
         required: false
         description: 'AWS environment for the bucket'
@@ -111,7 +115,13 @@ jobs:
           blueprint: s3Bucket
           properties: |
             {
+              "bucket_name": "${{ steps.create-bucket.outputs.bucket_name }}"
               "url": "${{ steps.create-bucket.outputs.bucket_url }}"
+              "bucket_acl": "${{ inputs.bucket_acl }}"
+            }
+          relations: |
+            {
+              "repository": "port-action-workflows"
             }
 
       - name: Inform Port of success
