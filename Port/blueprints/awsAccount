@@ -1,0 +1,33 @@
+{
+  "identifier": "awsAccount",
+  "description": "This blueprint represents an AWS account in our software catalog.",
+  "title": "AWS account",
+  "icon": "AWS",
+  "schema": {
+    "properties": {
+      "role_name": {
+        "type": "string",
+        "title": "Role Name",
+        "description": "The name of the IAM role."
+      },
+      "account_name": {
+        "type": "string",
+        "title": "Account Name",
+        "description": "The name for the account."
+      },
+      "email": {
+        "type": "string",
+        "title": "Email",
+        "description": "The email for the account."
+      }
+    },
+    "required": [
+      "email",
+      "account_name"
+    ]
+  },
+  "mirrorProperties": {},
+  "calculationProperties": {},
+  "aggregationProperties": {},
+  "relations": {}
+}

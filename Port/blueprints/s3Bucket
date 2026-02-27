@@ -1,0 +1,52 @@
+{
+  "identifier": "s3Bucket",
+  "description": "This blueprint represents an AWS S3 bucket in our software catalog",
+  "title": "AWS S3 Bucket",
+  "icon": "AWS",
+  "schema": {
+    "properties": {
+      "language": {
+        "type": "string",
+        "icon": "Git",
+        "title": "Language",
+        "default": "Node",
+        "enum": [
+          "GO",
+          "Python",
+          "Node"
+        ]
+      },
+      "url": {
+        "type": "string",
+        "title": "Github URL",
+        "icon": "Github",
+        "format": "url",
+        "description": "the link to the repo in our github"
+      },
+      "bucket_name": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 63,
+        "icon": "DefaultProperty"
+      },
+      "bucket_acl": {
+        "icon": "DefaultProperty",
+        "title": "Bucket_ACL",
+        "type": "string",
+        "default": "Private"
+      }
+    },
+    "required": []
+  },
+  "mirrorProperties": {},
+  "calculationProperties": {},
+  "aggregationProperties": {},
+  "relations": {
+    "repository": {
+      "title": "Repository",
+      "target": "githubRepository",
+      "required": false,
+      "many": false
+    }
+  }
+}

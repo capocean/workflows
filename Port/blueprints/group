@@ -1,0 +1,111 @@
+{
+  "identifier": "group",
+  "description": "A group of teams, such as Tribe, Domain or Business Unit",
+  "title": "Group",
+  "icon": "Home",
+  "schema": {
+    "properties": {},
+    "required": []
+  },
+  "mirrorProperties": {},
+  "calculationProperties": {},
+  "aggregationProperties": {
+    "size": {
+      "title": "Size",
+      "type": "number",
+      "target": "_user",
+      "calculationSpec": {
+        "func": "count",
+        "calculationBy": "entities"
+      }
+    },
+    "open_critical_bugs": {
+      "title": "Open Critical Bugs",
+      "icon": "DefaultProperty",
+      "type": "number",
+      "target": "sonarQubeIssue",
+      "query": {
+        "combinator": "and",
+        "rules": [
+          {
+            "property": "type",
+            "value": "BUG",
+            "operator": "="
+          },
+          {
+            "property": "status",
+            "value": "OPEN",
+            "operator": "="
+          },
+          {
+            "property": "severity",
+            "value": [
+              "CRITICAL",
+              "BLOCKER"
+            ],
+            "operator": "in"
+          }
+        ]
+      },
+      "calculationSpec": {
+        "func": "count",
+        "calculationBy": "entities"
+      }
+    },
+    "open_critical_codesmell": {
+      "title": "Open Critical Code Smell",
+      "type": "number",
+      "target": "sonarQubeIssue",
+      "query": {
+        "combinator": "and",
+        "rules": [
+          {
+            "property": "type",
+            "value": "CODE_SMELL",
+            "operator": "="
+          },
+          {
+            "property": "status",
+            "value": "OPEN",
+            "operator": "="
+          },
+          {
+            "property": "severity",
+            "value": [
+              "CRITICAL",
+              "BLOCKER"
+            ],
+            "operator": "in"
+          }
+        ]
+      },
+      "calculationSpec": {
+        "func": "count",
+        "calculationBy": "entities"
+      }
+    },
+    "total_incidents": {
+      "title": "Total Monthly Incidents",
+      "type": "number",
+      "target": "pagerdutyIncident",
+      "calculationSpec": {
+        "calculationBy": "entities",
+        "func": "count"
+      }
+    },
+    "mean_time_to_recovery": {
+      "title": "Mean Time to Recovery",
+      "icon": "DefaultProperty",
+      "type": "number",
+      "target": "pagerdutyIncident",
+      "calculationSpec": {
+        "func": "average",
+        "averageOf": "total",
+        "property": "recoveryTime",
+        "measureTimeBy": "resolvedAt",
+        "calculationBy": "property"
+      }
+    }
+  },
+  "relations": {}
+}

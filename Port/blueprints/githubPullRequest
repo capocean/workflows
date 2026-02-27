@@ -1,0 +1,136 @@
+{
+  "identifier": "githubPullRequest",
+  "title": "Pull Request",
+  "icon": "Github",
+  "ownership": {
+    "type": "Inherited",
+    "path": "creator"
+  },
+  "schema": {
+    "properties": {
+      "status": {
+        "title": "Status",
+        "type": "string",
+        "enum": [
+          "merged",
+          "open",
+          "closed"
+        ],
+        "enumColors": {
+          "merged": "purple",
+          "open": "green",
+          "closed": "red"
+        }
+      },
+      "closedAt": {
+        "title": "Closed at",
+        "type": "string",
+        "format": "date-time"
+      },
+      "updatedAt": {
+        "title": "Updated at",
+        "type": "string",
+        "format": "date-time"
+      },
+      "mergedAt": {
+        "title": "Merged at",
+        "type": "string",
+        "format": "date-time"
+      },
+      "createdAt": {
+        "title": "Created at",
+        "type": "string",
+        "format": "date-time"
+      },
+      "link": {
+        "format": "url",
+        "type": "string",
+        "title": "Link"
+      },
+      "prNumber": {
+        "type": "number",
+        "title": "PR number"
+      },
+      "leadTimeHours": {
+        "title": "Lead time in hours",
+        "type": "number"
+      },
+      "branch": {
+        "type": "string",
+        "title": "Branch"
+      }
+    },
+    "required": []
+  },
+  "mirrorProperties": {
+    "reviewer_teams": {
+      "title": "Reviewer Teams",
+      "path": "reviewers.$team"
+    }
+  },
+  "calculationProperties": {
+    "days_old": {
+      "title": "Days Old",
+      "icon": "DefaultProperty",
+      "calculation": "(now / 86400) - (.properties.createdAt | capture(\"(?<date>\\\\d{4}-\\\\d{2}-\\\\d{2})\") | .date | strptime(\"%Y-%m-%d\") | mktime / 86400) | floor",
+      "type": "number"
+    }
+  },
+  "aggregationProperties": {},
+  "relations": {
+    "git_hub_assignees": {
+      "title": "GitHub Assignees",
+      "target": "githubUser",
+      "required": false,
+      "many": true
+    },
+    "organization": {
+      "title": "Organization",
+      "target": "githubOrganization",
+      "required": false,
+      "many": false
+    },
+    "repository": {
+      "title": "Repository",
+      "target": "githubRepository",
+      "required": false,
+      "many": false
+    },
+    "git_hub_creator": {
+      "title": "GitHub Creator",
+      "target": "githubUser",
+      "required": false,
+      "many": false
+    },
+    "creator": {
+      "title": "Creator",
+      "target": "_user",
+      "required": false,
+      "many": false
+    },
+    "assignees": {
+      "title": "Assignees",
+      "target": "_user",
+      "required": false,
+      "many": true
+    },
+    "service": {
+      "title": "Service",
+      "target": "service",
+      "required": false,
+      "many": false
+    },
+    "git_hub_reviewers": {
+      "title": "GitHub Reviewers",
+      "target": "githubUser",
+      "required": false,
+      "many": true
+    },
+    "reviewers": {
+      "title": "Reviewers",
+      "target": "_user",
+      "required": false,
+      "many": true
+    }
+  }
+}

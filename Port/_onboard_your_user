@@ -1,0 +1,68 @@
+{
+  "identifier": "_onboard_your_user",
+  "title": "Register your user",
+  "icon": "User",
+  "description": "Register your user and connect it to your user in other tools",
+  "trigger": {
+    "type": "self-service",
+    "operation": "CREATE",
+    "userInputs": {
+      "properties": {
+        "teams": {
+          "type": "array",
+          "title": "Teams",
+          "icon": "Team",
+          "items": {
+            "type": "string",
+            "format": "entity",
+            "blueprint": "_team"
+          },
+          "default": {
+            "jqQuery": ".user.teamsIdentifiers"
+          },
+          "visible": true
+        },
+        "your_user": {
+          "type": "string",
+          "title": "Your user",
+          "blueprint": "_user",
+          "format": "entity",
+          "default": {
+            "jqQuery": ".user.email"
+          },
+          "visible": false
+        },
+        "jira_user": {
+          "title": "Jira user",
+          "icon": "Jira",
+          "type": "string",
+          "blueprint": "jiraUser",
+          "sort": {
+            "property": "emailAddress",
+            "order": "ASC"
+          },
+          "format": "entity"
+        }
+      },
+      "order": [
+        "teams",
+        "jira_user"
+      ]
+    },
+    "blueprintIdentifier": "_user"
+  },
+  "invocationMethod": {
+    "type": "UPSERT_ENTITY",
+    "blueprintIdentifier": "_user",
+    "mapping": {
+      "identifier": "{{.trigger.by.user.email}}",
+      "team": "{{.inputs.teams | (if . then map(.identifier) else [] end)}}",
+      "icon": "DefaultBlueprint",
+      "properties": {},
+      "relations": {
+        "jira_user": "{{ .inputs.jira_user.identifier?         // .inputs.your_user.relations.jira_user }}"
+      }
+    }
+  },
+  "requiredApproval": false
+}

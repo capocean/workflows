@@ -1,0 +1,153 @@
+{
+  "identifier": "jiraIssue",
+  "description": "",
+  "title": "Jira Issue",
+  "icon": "Jira",
+  "ownership": {
+    "type": "Inherited",
+    "path": "assignee"
+  },
+  "schema": {
+    "properties": {
+      "url": {
+        "title": "Issue URL",
+        "type": "string",
+        "format": "url",
+        "description": "URL to the issue in Jira"
+      },
+      "status": {
+        "title": "Status",
+        "type": "string",
+        "description": "The status of the issue"
+      },
+      "issueType": {
+        "title": "Type",
+        "type": "string",
+        "description": "The type of the issue"
+      },
+      "components": {
+        "title": "Components",
+        "type": "array",
+        "description": "The components related to this issue"
+      },
+      "creator": {
+        "title": "Creator",
+        "type": "string",
+        "description": "The user that created to the issue",
+        "format": "user"
+      },
+      "priority": {
+        "title": "Priority",
+        "type": "string",
+        "description": "The priority of the issue"
+      },
+      "labels": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Labels",
+        "type": "array"
+      },
+      "created": {
+        "title": "Created At",
+        "type": "string",
+        "description": "The created datetime of the issue",
+        "format": "date-time"
+      },
+      "updated": {
+        "title": "Updated At",
+        "type": "string",
+        "description": "The updated datetime of the issue",
+        "format": "date-time"
+      },
+      "resolutionDate": {
+        "title": "Resolved At",
+        "type": "string",
+        "description": "The datetime the issue changed to a resolved state",
+        "format": "date-time"
+      },
+      "port_run_id": {
+        "type": "string",
+        "title": "Port Run ID",
+        "description": "The Port action run ID for approval tracking"
+      }
+    },
+    "required": []
+  },
+  "mirrorProperties": {},
+  "calculationProperties": {
+    "handlingDuration": {
+      "title": "Handling Duration (Days)",
+      "icon": "Clock",
+      "description": "The amount of time in days from issue creation to issue resolution",
+      "calculation": "if (.properties.resolutionDate != null and .properties.created != null) then ((.properties.resolutionDate[0:19] + \"Z\" | fromdateiso8601) - (.properties.created[0:19] + \"Z\" | fromdateiso8601)) / 86400 else null end",
+      "type": "number"
+    }
+  },
+  "aggregationProperties": {},
+  "relations": {
+    "assignee": {
+      "title": "Assignee",
+      "target": "_user",
+      "required": false,
+      "many": false
+    },
+    "jira_user_assignee": {
+      "title": "Assignee (Jira User)",
+      "target": "jiraUser",
+      "required": false,
+      "many": false
+    },
+    "parentIssue": {
+      "title": "Parent Issue",
+      "target": "jiraIssue",
+      "required": false,
+      "many": false
+    },
+    "subtasks": {
+      "title": "Subtasks",
+      "target": "jiraIssue",
+      "required": false,
+      "many": true
+    },
+    "reporter": {
+      "title": "Reporter",
+      "target": "_user",
+      "required": false,
+      "many": false
+    },
+    "project": {
+      "title": "Project",
+      "description": "The Jira project that contains this issue",
+      "target": "jiraProject",
+      "required": false,
+      "many": false
+    },
+    "repository": {
+      "title": "Related repository",
+      "description": "Related repository",
+      "target": "githubRepository",
+      "required": false,
+      "many": false
+    },
+    "service": {
+      "title": "Service",
+      "target": "service",
+      "required": false,
+      "many": false
+    },
+    "jira_user_reporter": {
+      "title": "Reporter (Jira User)",
+      "target": "jiraUser",
+      "required": false,
+      "many": false
+    },
+    "pull_request": {
+      "title": "Pull Requests",
+      "description": "GitHub pull requests that reference this Jira issue",
+      "target": "githubPullRequest",
+      "required": false,
+      "many": true
+    }
+  }
+}
