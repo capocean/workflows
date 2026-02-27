@@ -1,0 +1,43 @@
+{
+  "identifier": "create_repo_upon_jira_approval",
+  "title": "Create Repo Upon Jira Approval",
+  "description": "Create Repository Upon Jira Issue Approval using CloudFormation",
+  "icon": "GithubActions",
+  "trigger": {
+    "type": "automation",
+    "event": {
+      "type": "ENTITY_UPDATED",
+      "blueprintIdentifier": "jiraIssue"
+    },
+    "condition": {
+      "type": "JQ",
+      "expressions": [
+        ".diff.before.properties.status | ascii_downcase  == \"open\"",
+        ".diff.after.properties.status | ascii_downcase  == \"create repo\""
+      ],
+      "combinator": "and"
+    }
+  },
+  "invocationMethod": {
+    "type": "INTEGRATION_ACTION",
+    "installationId": "github-ocean",
+    "integrationActionType": "dispatch_workflow",
+    "integrationActionExecutionProperties": {
+      "org": "capocean",
+      "repo": "workflows",
+      "workflow": "create-repo-s3-bucket.yaml",
+      "workflowInputs": {
+        "repo_name": "{{ .event.diff.after.title | gsub(\"[^a-zA-Z0-9_-]\"; \"-\") | ascii_downcase }}",
+        "repo_description": "Repository for Jira issue: {{ .event.diff.after.title }}",
+        "jira_issue_key": "{{ .event.diff.after.identifier }}",
+        "environment": "dev",
+        "port_context": {
+          "run_id": "{{ .run.id }}"
+        }
+      },
+      "reportWorkflowStatus": true
+    }
+  },
+  "publish": true,
+  "allowAnyoneToViewRuns": true
+}

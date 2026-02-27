@@ -1,0 +1,43 @@
+{
+  "identifier": "delete_existing_github_repository",
+  "title": "Delete an Existing GitHub Repository",
+  "icon": "Github",
+  "description": "Delete an Existing GitHub repository with confirmation",
+  "trigger": {
+    "type": "self-service",
+    "operation": "DELETE",
+    "userInputs": {
+      "properties": {
+        "confirmation": {
+          "title": "Type 'DELETE' to confirm",
+          "type": "string",
+          "description": "Type DELETE in capital letters to confirm permanent deletion",
+          "pattern": "^DELETE$"
+        }
+      },
+      "required": [
+        "confirmation"
+      ],
+      "order": [
+        "confirmation"
+      ]
+    },
+    "blueprintIdentifier": "githubRepository"
+  },
+  "invocationMethod": {
+    "type": "WEBHOOK",
+    "url": "https://api.github.com/repos/{{ (.entity.relations.organization | split(\"/\") | last) }}/{{ .entity.identifier }}",
+    "agent": false,
+    "synchronized": true,
+    "method": "DELETE",
+    "headers": {
+      "Authorization": "Bearer {{ .secrets.GITHUB_TOKEN }}",
+      "Accept": "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28"
+    }
+  },
+  "requiredApproval": true,
+  "approvalNotification": {
+    "type": "email"
+  }
+}

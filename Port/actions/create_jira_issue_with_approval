@@ -1,0 +1,320 @@
+{
+  "identifier": "create_jira_issue_with_approval",
+  "title": "Create Jira Issue with Approval",
+  "icon": "Jira",
+  "description": "Create a new Jira issue for approval. Once approved in Jira, a GitHub repository will be created automatically.",
+  "trigger": {
+    "type": "self-service",
+    "operation": "CREATE",
+    "userInputs": {
+      "properties": {
+        "project": {
+          "title": "Jira Project",
+          "type": "string",
+          "blueprint": "jiraProject",
+          "format": "entity",
+          "description": "Select the Jira project where the issue will be created"
+        },
+        "title": {
+          "title": "Issue Title",
+          "type": "string",
+          "description": "Title/Summary of the Jira issue",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "description": {
+          "title": "Description",
+          "type": "string",
+          "format": "markdown",
+          "description": "Detailed description of the request"
+        },
+        "approver": {
+          "title": "Approver",
+          "type": "string",
+          "blueprint": "_user",
+          "format": "entity",
+          "description": "Who should approve/reject this issue? (Must have a Jira account)",
+          "dataset": {
+            "combinator": "and",
+            "rules": [
+              {
+                "property": "jira_user_id",
+                "operator": "isNotEmpty"
+              }
+            ]
+          }
+        },
+        "repository_name": {
+          "title": "Repository Name (if approved)",
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+$",
+          "description": "Name of the GitHub repository to create upon approval (alphanumeric, hyphens, and underscores only)",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "repository_description": {
+          "title": "Repository Description",
+          "type": "string",
+          "description": "Description for the GitHub repository",
+          "default": ""
+        },
+        "repository_visibility": {
+          "title": "Repository Visibility",
+          "type": "string",
+          "enum": [
+            "public",
+            "private"
+          ],
+          "default": "private",
+          "enumColors": {
+            "public": "blue",
+            "private": "lightGray"
+          },
+          "description": "Whether the repository should be public or private"
+        },
+        "issue_type": {
+          "title": "Issue Type",
+          "type": "string",
+          "enum": [
+            "Task",
+            "Story",
+            "Bug"
+          ],
+          "default": "Task",
+          "description": "Type of Jira issue to create"
+        },
+        "priority": {
+          "title": "Priority",
+          "type": "string",
+          "enum": [
+            "Highest",
+            "High",
+            "Medium",
+            "Low",
+            "Lowest"
+          ],
+          "default": "Medium",
+          "enumColors": {
+            "Highest": "red",
+            "High": "orange",
+            "Medium": "yellow",
+            "Low": "lightGray",
+            "Lowest": "darkGray"
+          },
+          "description": "Priority level of the request"
+        }
+      },
+      "required": [
+        "project",
+        "title",
+        "approver",
+        "repository_name"
+      ],
+      "order": [
+        "project",
+        "title",
+        "description",
+        "approver",
+        "issue_type",
+        "priority",
+        "repository_name",
+        "repository_description",
+        "repository_visibility"
+      ]
+    }
+  },
+  "invocationMethod": {
+    "type": "WEBHOOK",
+    "url": "https://api.atlassian.com/ex/jira/86d27dea-1c3e-4be9-8929-73a57aef29df/rest/api/2/issue",
+    "agent": false,
+    "synchronized": true,
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer {{ .secrets.__JIRA_JIRA_ATLASSIAN_USER_TOKEN }}"
+    },
+    "body": {
+      "fields": {
+        "project": {
+          "key": "{{ .inputs.project.identifier }}"
+        },
+        "assignee": {
+          "id": "{{ .inputs.approver.mirrorProperties.jira_user_id }}"
+        },
+        "summary": "{{ .inputs.title }}",
+        "description": {
+          "type": "doc",
+          "version": 1,
+          "content": [
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 2
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Repository Request"
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{{ .inputs.description }}"
+                }
+              ]
+            },
+            {
+              "type": "rule"
+            },
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 3
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Repository Details"
+                }
+              ]
+            },
+            {
+              "type": "bulletList",
+              "content": [
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Repository Name: ",
+                          "marks": [
+                            {
+                              "type": "strong"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "text": "{{ .inputs.repository_name }}"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Description: ",
+                          "marks": [
+                            {
+                              "type": "strong"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "text": "{{ .inputs.repository_description }}"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Visibility: ",
+                          "marks": [
+                            {
+                              "type": "strong"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "text": "{{ .inputs.repository_visibility }}"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "rule"
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Port Run ID: ",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": "{{ .run.id }}",
+                  "marks": [
+                    {
+                      "type": "code"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Requested by: ",
+                  "marks": [
+                    {
+                      "type": "strong"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": "{{ .trigger.by.user.email }}"
+                }
+              ]
+            }
+          ]
+        },
+        "issuetype": {
+          "name": "{{ .inputs.issue_type }}"
+        },
+        "priority": {
+          "name": "{{ .inputs.priority }}"
+        },
+        "labels": [
+          "port-automation",
+          "repository-request",
+          "pending-approval"
+        ]
+      }
+    }
+  },
+  "requiredApproval": false
+}

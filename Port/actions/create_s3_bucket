@@ -1,0 +1,70 @@
+{
+  "identifier": "create_s3_bucket",
+  "title": "Create S3 Bucket",
+  "icon": "BitBucket",
+  "description": "Create a new AWS S3 bucket for a repository",
+  "trigger": {
+    "type": "self-service",
+    "operation": "CREATE",
+    "userInputs": {
+      "properties": {
+        "repo_name": {
+          "type": "string",
+          "title": "Repository Name",
+          "description": "Name of the repository (will be used as bucket name)",
+          "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+          "minLength": 3,
+          "maxLength": 63
+        },
+        "region": {
+          "type": "string",
+          "title": "AWS Region",
+          "description": "AWS region where the bucket will be created",
+          "default": "us-east-1",
+          "enum": [
+            "us-east-1",
+            "us-east-2",
+            "us-west-1",
+            "us-west-2",
+            "eu-west-1",
+            "eu-west-2",
+            "eu-central-1",
+            "ap-south-1",
+            "ap-southeast-1",
+            "ap-southeast-2",
+            "ap-northeast-1"
+          ]
+        }
+      },
+      "required": [
+        "repo_name"
+      ],
+      "order": [
+        "repo_name",
+        "region"
+      ]
+    },
+    "blueprintIdentifier": "s3Bucket"
+  },
+  "invocationMethod": {
+    "type": "INTEGRATION_ACTION",
+    "installationId": "github-ocean",
+    "integrationActionType": "dispatch_workflow",
+    "integrationActionExecutionProperties": {
+      "org": "capocean",
+      "repo": "workflows",
+      "workflow": "create-s3-bucket.yaml",
+      "workflowInputs": {
+        "repo_name": "{{ .inputs.\"repo_name\" }}",
+        "region": "{{ .inputs.\"region\" }}",
+        "port_context": {
+          "blueprint": "{{ .action.blueprint }}",
+          "run_id": "{{ .run.id }}"
+        }
+      },
+      "reportWorkflowStatus": true
+    }
+  },
+  "requiredApproval": false,
+  "allowAnyoneToViewRuns": true
+}

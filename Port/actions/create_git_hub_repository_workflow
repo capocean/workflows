@@ -1,0 +1,72 @@
+{
+  "identifier": "create_git_hub_repository_workflow",
+  "title": "Create GitHub Repository Workflow",
+  "icon": "Github",
+  "description": "Create GitHub Repository and automatically add init.yml workflow from central repository",
+  "trigger": {
+    "type": "self-service",
+    "operation": "CREATE",
+    "userInputs": {
+      "properties": {
+        "repository_name": {
+          "icon": "DefaultProperty",
+          "title": "Repository Name",
+          "type": "string",
+          "description": "Name of the new repository"
+        },
+        "description": {
+          "title": "Description",
+          "icon": "DefaultProperty",
+          "type": "string",
+          "description": "Repository description",
+          "default": ""
+        },
+        "visibility": {
+          "type": "string",
+          "title": "Visibility",
+          "enum": [
+            "private",
+            "public"
+          ],
+          "default": "private",
+          "description": "Repository visibility"
+        },
+        "auto_init": {
+          "type": "boolean",
+          "title": "Initialize with README",
+          "default": true,
+          "description": "Create an initial README.md file"
+        }
+      },
+      "required": [
+        "repository_name"
+      ],
+      "order": [
+        "repository_name",
+        "description",
+        "visibility",
+        "auto_init"
+      ]
+    }
+  },
+  "invocationMethod": {
+    "type": "INTEGRATION_ACTION",
+    "installationId": "github-ocean",
+    "integrationActionType": "dispatch_workflow",
+    "integrationActionExecutionProperties": {
+      "org": "bdocean",
+      "repo": "workflows",
+      "workflow": "create-repo-with-init.yaml",
+      "workflowInputs": {
+        "repository_name": "{{ .inputs.repository_name }}",
+        "description": "{{ .inputs.description }}",
+        "visibility": "{{ .inputs.visibility }}",
+        "auto_init": "{{ .inputs.auto_init | toString }}",
+        "run_id": "{{ .run.id }}"
+      },
+      "reportWorkflowStatus": true
+    }
+  },
+  "requiredApproval": false,
+  "allowAnyoneToViewRuns": true
+}
