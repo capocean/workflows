@@ -1,0 +1,39 @@
+{
+  "identifier": "approve_jira_creation_from_issue",
+  "title": "Approve Jira Issue Creation from Jira",
+  "description": "Automatically approve Port action run when Jira approval issue status changes to 'Approved'",
+  "icon": "Jira",
+  "trigger": {
+    "type": "automation",
+    "event": {
+      "type": "ENTITY_UPDATED",
+      "blueprintIdentifier": "jiraIssue"
+    },
+    "condition": {
+      "type": "JQ",
+      "expressions": [
+        ".diff.before.properties.status != \"Approved\" and .diff.after.properties.status == \"Approved\"",
+        ".diff.after.properties.labels != null",
+        ".diff.after.properties.labels | contains([\"approval-request\"])",
+        ".diff.after.properties.port_run_id != null"
+      ],
+      "combinator": "and"
+    }
+  },
+  "invocationMethod": {
+    "type": "WEBHOOK",
+    "url": "https://api.getport.io/v1/actions/runs/{{ .event.diff.after.properties.port_run_id }}/approval",
+    "agent": false,
+    "synchronized": true,
+    "method": "PATCH",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "status": "APPROVE",
+      "description": "Approved via Jira issue status change"
+    }
+  },
+  "publish": true,
+  "allowAnyoneToViewRuns": true
+}

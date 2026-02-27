@@ -1,0 +1,36 @@
+{
+  "identifier": "create_github_repo_on_jira_approval",
+  "title": "Create GitHub Repository on Jira Issue Approval",
+  "description": "Automatically creates a GitHub repository when Jira issue status changes from WAITING FOR APPROVAL to OPEN",
+  "icon": "Jira",
+  "trigger": {
+    "type": "automation",
+    "event": {
+      "type": "ENTITY_UPDATED",
+      "blueprintIdentifier": "jiraIssue"
+    },
+    "condition": {
+      "type": "JQ",
+      "expressions": [
+        ".diff.before.properties.status == \"Waiting for approval\"",
+        ".diff.after.properties.status == \"Open\""
+      ],
+      "combinator": "and"
+    }
+  },
+  "invocationMethod": {
+    "type": "GITHUB",
+    "org": "bdocean",
+    "repo": "workflows",
+    "workflow": "create-repo-with-init.yaml",
+    "workflowInputs": {
+      "repo_name": "{{ .event.diff.after.title | gsub(\"[^a-zA-Z0-9_-]\"; \"-\") | ascii_downcase }}",
+      "description": "Repository for Jira issue: {{ .event.diff.after.title }}",
+      "private": "true",
+      "port_run_id": "{{ .run.id }}"
+    },
+    "reportWorkflowStatus": true
+  },
+  "publish": false,
+  "allowAnyoneToViewRuns": true
+}
