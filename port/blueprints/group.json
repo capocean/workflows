@@ -1,6 +1,6 @@
 {
   "identifier": "group",
-  "description": "A group of teams, such as Tribe, Domain or Business Unit",
+  "description": "A group of teams, such as Tribe, Domain or Business Unit in Jira",
   "title": "Group",
   "icon": "Home",
   "schema": {
