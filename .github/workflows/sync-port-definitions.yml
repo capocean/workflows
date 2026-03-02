@@ -1,0 +1,124 @@
+name: Sync Port.io Definitions
+
+on:
+  push:
+    branches:
+      - main # Adjust this if your default branch is different
+    paths:
+      - 'port/**/*.json'
+
+jobs:
+  sync-to-port:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required to accurately detect changed files
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+        with:
+          files: port/**/*.json
+
+      - name: Sync updates to Port.io
+        if: steps.changed-files.outputs.any_changed == 'true'
+        env:
+          # Make sure these secrets are configured in your GitHub repository
+          PORT_CLIENT_ID: ${{ secrets.PORT_CLIENT_ID }}
+          PORT_CLIENT_SECRET: ${{ secrets.PORT_CLIENT_SECRET }}
+        run: |
+          echo "Authenticating with Port..."
+          TOKEN_RESPONSE=$(curl -sX POST "https://api.getport.io/v1/auth/access_token" \
+            -H "Content-Type: application/json" \
+            -d "{\"clientId\": \"$PORT_CLIENT_ID\", \"clientSecret\": \"$PORT_CLIENT_SECRET\"}")
+          
+          PORT_TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.accessToken')
+          
+          if [ "$PORT_TOKEN" == "null" ] || [ -z "$PORT_TOKEN" ]; then
+            echo "Failed to authenticate with Port.io. Check your credentials."
+            exit 1
+          fi
+
+          # Loop through all modified or added JSON files
+          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            echo "----------------------------------------"
+            echo "Processing update for: $file"
+          
+            # Extract the subfolder (e.g., automations, actions, blueprints)
+            FOLDER_TYPE=$(echo "$file" | awk -F'/' '{print $2}')
+          
+            # Extract the identifier from the JSON payload
+            IDENTIFIER=$(jq -r '.identifier' "$file")
+
+            case "$FOLDER_TYPE" in
+              blueprints)
+                echo "Checking existence for blueprint: $IDENTIFIER"
+                HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X GET "https://api.getport.io/v1/blueprints/$IDENTIFIER" -H "Authorization: Bearer $PORT_TOKEN")
+          
+                if [ "$HTTP_STATUS" == "200" ]; then
+                  echo "Updating existing blueprint..."
+                  curl -sX PUT "https://api.getport.io/v1/blueprints/$IDENTIFIER" \
+                    -H "Authorization: Bearer $PORT_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d @"$file"
+                else
+                  echo "Creating new blueprint..."
+                  curl -sX POST "https://api.getport.io/v1/blueprints" \
+                    -H "Authorization: Bearer $PORT_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d @"$file"
+                fi
+                ;;
+
+              actions)
+                # Actions are tied to blueprints, so we must extract the blueprint ID from the JSON
+                BLUEPRINT_ID=$(jq -r '.blueprint' "$file")
+                echo "Checking existence for action: $IDENTIFIER under blueprint: $BLUEPRINT_ID"
+          
+                # Note: If your JSON structure for actions doesn't include the blueprint ID at the root, 
+                # you'll need to adjust the jq query above to fetch it correctly.
+          
+                HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X GET "https://api.getport.io/v1/blueprints/$BLUEPRINT_ID/actions/$IDENTIFIER" -H "Authorization: Bearer $PORT_TOKEN")
+          
+                if [ "$HTTP_STATUS" == "200" ]; then
+                  echo "Updating existing action..."
+                  curl -sX PUT "https://api.getport.io/v1/blueprints/$BLUEPRINT_ID/actions/$IDENTIFIER" \
+                    -H "Authorization: Bearer $PORT_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d @"$file"
+                else
+                  echo "Creating new action..."
+                  curl -sX POST "https://api.getport.io/v1/blueprints/$BLUEPRINT_ID/actions" \
+                    -H "Authorization: Bearer $PORT_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d @"$file"
+                fi
+                ;;
+
+              automations)
+                echo "Checking existence for automation: $IDENTIFIER"
+                HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X GET "https://api.getport.io/v1/automations/$IDENTIFIER" -H "Authorization: Bearer $PORT_TOKEN")
+          
+                if [ "$HTTP_STATUS" == "200" ]; then
+                  echo "Updating existing automation..."
+                  curl -sX PUT "https://api.getport.io/v1/automations/$IDENTIFIER" \
+                    -H "Authorization: Bearer $PORT_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d @"$file"
+                else
+                  echo "Creating new automation..."
+                  curl -sX POST "https://api.getport.io/v1/automations" \
+                    -H "Authorization: Bearer $PORT_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d @"$file"
+                fi
+                ;;
+
+              *)
+                echo "Unknown entity type in folder: $FOLDER_TYPE. Skipping file."
+                ;;
+            esac
+            echo -e "\n"
+          done
