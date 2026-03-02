@@ -1,7 +1,7 @@
 {
   "identifier": "pagerdutyIncident",
   "description": "This blueprint represents a PagerDuty incident in our software catalogs",
-  "title": "PagerDuty Incident- update 20260301",
+  "title": "PagerDuty Incident- update 20260302",
   "icon": "pagerduty",
   "ownership": {
     "type": "Inherited",
