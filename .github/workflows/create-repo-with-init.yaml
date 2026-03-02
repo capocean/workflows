@@ -110,7 +110,7 @@ jobs:
           runId: ${{ inputs.run_id }}
           logMessage: |
             Repository created: ${{ steps.create_repo.outputs.repo_url }}
-            Adding init.yml workflow file...
+            Adding init.yaml workflow file...
 
       - name: Wait for repository initialization
         run: sleep 5
@@ -122,15 +122,15 @@ jobs:
           token: ${{ secrets.GH_PAT }}
           path: central-repo
 
-      - name: Get init.yml content
-        id: get_init_yml
+      - name: Get init.yaml content
+        id: get_init_yaml
         run: |
-          if [ ! -f "central-repo/.github/workflows/init.yml" ]; then
-            echo "init.yml not found in central repository at .github/workflows/init.yml"
+          if [ ! -f "central-repo/.github/workflows/init.yaml" ]; then
+            echo "init.yaml not found in central repository at .github/workflows/init.yaml"
             exit 1
           fi
           
-          INIT_YML_CONTENT=$(cat central-repo/.github/workflows/init.yml | base64 -w 0)
+          INIT_YML_CONTENT=$(cat central-repo/.github/workflows/init.yaml | base64 -w 0)
           
           # Use delimiter for multiline output
           {
@@ -139,18 +139,18 @@ jobs:
             echo "EOF"
           } >> $GITHUB_OUTPUT
           
-          echo "init.yml content retrieved from bdocean/workflows"
+          echo "init.yaml content retrieved from bdocean/workflows"
 
-      - name: Create init.yml in new repository
+      - name: Create init.yaml in new repository
         id: create_init_file
         run: |
-          echo "Creating init.yml in ${{ steps.create_repo.outputs.repo_full_name }}"
+          echo "Creating init.yaml in ${{ steps.create_repo.outputs.repo_full_name }}"
           
           RESPONSE=$(curl -s -w "%{http_code}" -X PUT \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${{ steps.create_repo.outputs.repo_full_name }}/contents/.github/workflows/init.yml" \
+            "https://api.github.com/repos/${{ steps.create_repo.outputs.repo_full_name }}/contents/.github/workflows/init.yaml" \
             -d "{
               \"message\": \"Add init workflow from central repository\",
               \"content\": \"${{ steps.get_init_yml.outputs.content }}\"
@@ -165,10 +165,10 @@ jobs:
           if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
             FILE_URL=$(echo "$BODY" | jq -r '.content.html_url')
             echo "file_url=$FILE_URL" >> $GITHUB_OUTPUT
-            echo "init.yml workflow file added to new repository"
+            echo "init.yaml workflow file added to new repository"
             echo "   File URL: $FILE_URL"
           else
-            echo "Warning: Could not create init.yml file (HTTP $HTTP_CODE)"
+            echo "Warning: Could not create init.yaml file (HTTP $HTTP_CODE)"
             echo "$BODY" | jq . || echo "$BODY"
             # Don't fail the entire workflow, just warn
           fi
@@ -182,7 +182,7 @@ jobs:
           runId: ${{ inputs.run_id }}
           logMessage: |
             Repository created successfully: ${{ steps.create_repo.outputs.repo_url }}
-            init.yml workflow file added from bdocean/workflows
+            init.yaml workflow file added from bdocean/workflows
 
       - name: Inform Port of action status
         uses: port-labs/port-github-action@v1
@@ -204,4 +204,4 @@ jobs:
           status: "FAILURE"
           runId: ${{ inputs.run_id }}
           logMessage: |
-            Failed to create repository or add init.yml workflow file
+            Failed to create repository or add init.yaml workflow file

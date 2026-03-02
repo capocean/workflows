@@ -2,7 +2,7 @@
   "identifier": "create_git_hub_repository_workflow",
   "title": "Create GitHub Repository Workflow",
   "icon": "Github",
-  "description": "Create GitHub Repository and automatically add init.yml workflow from central repository",
+  "description": "Create GitHub Repository and automatically add init.yaml workflow from central repository",
   "trigger": {
     "type": "self-service",
     "operation": "CREATE",
