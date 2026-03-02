@@ -1,0 +1,133 @@
+{
+  "identifier": "pagerdutyIncident",
+  "description": "This blueprint represents a PagerDuty incident in our software catalog",
+  "title": "PagerDuty Incident",
+  "icon": "pagerduty",
+  "ownership": {
+    "type": "Inherited",
+    "path": "service"
+  },
+  "schema": {
+    "properties": {
+      "status": {
+        "type": "string",
+        "title": "Incident Status",
+        "enum": [
+          "triggered",
+          "annotated",
+          "acknowledged",
+          "reassigned",
+          "escalated",
+          "reopened",
+          "resolved"
+        ],
+        "enumColors": {
+          "triggered": "red",
+          "annotated": "blue",
+          "acknowledged": "yellow",
+          "reassigned": "blue",
+          "escalated": "yellow",
+          "reopened": "red",
+          "resolved": "green"
+        }
+      },
+      "url": {
+        "type": "string",
+        "format": "url",
+        "title": "Incident URL"
+      },
+      "urgency": {
+        "title": "Incident Urgency",
+        "type": "string",
+        "enum": [
+          "high",
+          "low"
+        ],
+        "enumColors": {
+          "high": "red",
+          "low": "green"
+        }
+      },
+      "priority": {
+        "title": "Priority",
+        "type": "string"
+      },
+      "description": {
+        "type": "string",
+        "title": "Description"
+      },
+      "assignees": {
+        "title": "Assignees",
+        "type": "array",
+        "items": {
+          "type": "string",
+          "format": "user"
+        }
+      },
+      "escalation_policy": {
+        "type": "string",
+        "title": "Escalation Policy"
+      },
+      "created_at": {
+        "title": "Created At",
+        "type": "string",
+        "format": "date-time"
+      },
+      "updated_at": {
+        "title": "Updated At",
+        "type": "string",
+        "format": "date-time"
+      },
+      "resolvedAt": {
+        "title": "Incident Resolution Time",
+        "type": "string",
+        "format": "date-time",
+        "description": "The timestamp when the incident was resolved"
+      },
+      "recoveryTime": {
+        "title": "Time to Recovery",
+        "type": "number",
+        "description": "The time (in minutes) between the incident being triggered and resolved"
+      },
+      "triggered_by": {
+        "type": "string",
+        "title": "Triggered By"
+      }
+    },
+    "required": []
+  },
+  "mirrorProperties": {
+    "assignee": {
+      "title": "Assignee",
+      "path": "incident_port_assignee.$identifier"
+    }
+  },
+  "calculationProperties": {},
+  "aggregationProperties": {},
+  "relations": {
+    "service": {
+      "title": "Service",
+      "target": "service",
+      "required": false,
+      "many": false
+    },
+    "pagerdutyService": {
+      "title": "PagerDuty Service",
+      "target": "pagerdutyService",
+      "required": false,
+      "many": false
+    },
+    "incident_port_assignee": {
+      "title": "Incident Assignee",
+      "target": "_user",
+      "required": false,
+      "many": true
+    },
+    "incident_pagerduty_assignee": {
+      "title": "Incident Pagerduty Assignee",
+      "target": "pagerdutyUser",
+      "required": false,
+      "many": true
+    }
+  }
+}
