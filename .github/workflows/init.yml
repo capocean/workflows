@@ -1,36 +1,123 @@
-# This is a basic workflow to help you get started with Actions
-
-name: CI
+name: Sync Port.io Definitions
 
 # Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
+  # Triggers the workflow on push, but ONLY if files in the port/ directory change
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    paths:
+      - 'port/**/*.json'
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  sync-to-port:
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v1
+      # Checks-out your repository (Updated to v4 for better compatibility)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required to accurately detect changed files
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+      # Identifies exactly which JSON files were modified
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+        with:
+          files: port/**/*.json
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      # Executes the sync script if files changed
+      - name: Sync updates to Port.io
+        if: steps.changed-files.outputs.any_changed == 'true'
+        env:
+          # Ensure these are configured in your repository or organization secrets
+          PORT_CLIENT_ID: ${{ secrets.PORT_CLIENT_ID }}
+          PORT_CLIENT_SECRET: ${{ secrets.PORT_CLIENT_SECRET }}
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          echo "Authenticating with Port..."
+          TOKEN_RESPONSE=$(curl -sX POST "https://api.getport.io/v1/auth/access_token" \
+            -H "Content-Type: application/json" \
+            -d "{\"clientId\": \"$PORT_CLIENT_ID\", \"clientSecret\": \"$PORT_CLIENT_SECRET\"}")
+          
+          PORT_TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.accessToken')
+          
+          if [ "$PORT_TOKEN" == "null" ] || [ -z "$PORT_TOKEN" ]; then
+            echo "Failed to authenticate with Port.io. Check your credentials."
+            exit 1
+          fi
+
+          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            echo "----------------------------------------"
+            echo "Processing update for: $file"
+          
+            FOLDER_TYPE=$(echo "$file" | awk -F'/' '{print $2}')
+            IDENTIFIER=$(jq -r '.identifier' "$file")
+
+            case "$FOLDER_TYPE" in
+              blueprints)
+                echo "Checking existence for blueprint: $IDENTIFIER"
+                HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X GET "https://api.getport.io/v1/blueprints/$IDENTIFIER" -H "Authorization: Bearer $PORT_TOKEN")
+          
+                if [ "$HTTP_STATUS" == "200" ]; then
+                  echo "Updating existing blueprint..."
+                  curl -sX PUT "https://api.getport.io/v1/blueprints/$IDENTIFIER" \
+                    -H "Authorization: Bearer $PORT_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d @"$file"
+                else
+                  echo "Creating new blueprint..."
+                  curl -sX POST "https://api.getport.io/v1/blueprints" \
+                    -H "Authorization: Bearer $PORT_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d @"$file"
+                fi
+                ;;
+
+              actions | actionss)
+                BLUEPRINT_ID=$(jq -r '.blueprint' "$file")
+                echo "Checking existence for action: $IDENTIFIER under blueprint: $BLUEPRINT_ID"
+          
+                HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X GET "https://api.getport.io/v1/blueprints/$BLUEPRINT_ID/actions/$IDENTIFIER" -H "Authorization: Bearer $PORT_TOKEN")
+          
+                if [ "$HTTP_STATUS" == "200" ]; then
+                  echo "Updating existing action..."
+                  curl -sX PUT "https://api.getport.io/v1/blueprints/$BLUEPRINT_ID/actions/$IDENTIFIER" \
+                    -H "Authorization: Bearer $PORT_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d @"$file"
+                else
+                  echo "Creating new action..."
+                  curl -sX POST "https://api.getport.io/v1/blueprints/$BLUEPRINT_ID/actions" \
+                    -H "Authorization: Bearer $PORT_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d @"$file"
+                fi
+                ;;
+
+              automations)
+                echo "Checking existence for automation: $IDENTIFIER"
+                HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X GET "https://api.getport.io/v1/automations/$IDENTIFIER" -H "Authorization: Bearer $PORT_TOKEN")
+          
+                if [ "$HTTP_STATUS" == "200" ]; then
+                  echo "Updating existing automation..."
+                  curl -sX PUT "https://api.getport.io/v1/automations/$IDENTIFIER" \
+                    -H "Authorization: Bearer $PORT_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d @"$file"
+                else
+                  echo "Creating new automation..."
+                  curl -sX POST "https://api.getport.io/v1/automations" \
+                    -H "Authorization: Bearer $PORT_TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d @"$file"
+                fi
+                ;;
+
+              *)
+                echo "Unknown entity type in folder: $FOLDER_TYPE. Skipping file."
+                ;;
+            esac
+            echo -e "\n"
+          done
